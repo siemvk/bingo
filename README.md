@@ -1,15 +1,8 @@
-# bingo
+N-naam = make new host
+P-pin = the pin to connect to the host
+C-pin = connect to the host
+M-message = the message to send to the host or client
 
-To install dependencies:
 
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run 
-```
-
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+X01 = weird format sent
+205 = host gave up
