@@ -2,10 +2,10 @@ import { playerStateUpdate, type element, type playerId, type toClient, type toS
 
 const code = document.getElementById("code");
 
-let URL = "ws://localhost:8081"
+let URL = "wss://ws.siemvk.nl"
 
-if (window.origin.includes("siemvk.nl")) {
-    URL = "ws://ws.siemvk.nl/"
+if (localStorage.getItem("testing") !== null) {
+    URL = "ws://localhost:8081"
 }
 
 const ws = new WebSocket(URL)

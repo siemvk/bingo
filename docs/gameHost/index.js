@@ -1,8 +1,8 @@
 // gameHost/index.ts
 var code = document.getElementById("code");
-var URL = "ws://localhost:8081";
-if (window.origin.includes("siemvk.nl")) {
-  URL = "ws://ws.siemvk.nl/";
+var URL = "wss://ws.siemvk.nl";
+if (localStorage.getItem("testing") !== null) {
+  URL = "ws://localhost:8081";
 }
 var ws = new WebSocket(URL);
 var adminWs = new WebSocket(URL);
@@ -188,5 +188,5 @@ function updC() {
   document.getElementById("adminPin").innerText = "De code is: " + Apin;
 }
 
-//# debugId=259454AE1270A63164756E2164756E21
+//# debugId=A2AEC2C71CD86AD864756E2164756E21
 //# sourceMappingURL=index.js.map
