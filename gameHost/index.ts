@@ -2,9 +2,14 @@ import { playerStateUpdate, type playerId, type toClient, type toServer } from "
 
 const code = document.getElementById("code");
 
+let URL = "ws://localhost:8081"
 
-const ws = new WebSocket("ws://localhost:8081")
-const adminWs = new WebSocket("ws://localhost:8081")
+if (window.origin.includes("siemvk.nl")) {
+    URL = "ws://ws.siemvk.nl/"
+}
+
+const ws = new WebSocket(URL)
+const adminWs = new WebSocket(URL)
 
 let pin = "None"
 let Apin = "None"

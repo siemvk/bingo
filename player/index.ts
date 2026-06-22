@@ -1,6 +1,12 @@
 import { playerStateUpdate, type toClient, type toServer, type element } from "../packet.js"
 
-const ws = new WebSocket("ws://localhost:8081")
+let URL = "ws://localhost:8081"
+
+if (window.origin.includes("siemvk.nl")) {
+    URL = "ws://ws.siemvk.nl/"
+}
+
+const ws = new WebSocket(URL)
 
 let pin = "None"
 
