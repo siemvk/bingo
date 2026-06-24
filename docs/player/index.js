@@ -69,13 +69,45 @@ function renderElement(el) {
     }
     case "html-render": {
       const existingHtml = document.getElementById(el.id);
+      let container = existingHtml;
       if (existingHtml) {
         existingHtml.innerHTML = el.content;
       } else {
-        const newElement = document.createElement("div");
-        newElement.innerHTML = el.content;
-        newElement.id = el.id;
-        gameCard.appendChild(newElement);
+        container = document.createElement("div");
+        container.innerHTML = el.content;
+        container.id = el.id;
+        gameCard.appendChild(container);
+      }
+      if (container) {
+        const customSenders = container.querySelectorAll('[sendData="1"]'.toLowerCase());
+        customSenders.forEach((sender) => {
+          sender.onclick = (e) => {
+            e.preventDefault();
+            const blameId = sender.getAttribute("blame");
+            const extraDataBlameId = sender.getAttribute("extraDataBlame".toLowerCase());
+            let extraData = sender.getAttribute("extraData".toLowerCase());
+            wsSend(ws, {
+              type: "UI-msg",
+              elementInteractedWith: {
+                id: blameId || "unknown",
+                type: "button",
+                interaction: "sendToHost",
+                icon: "",
+                content: ""
+              },
+              elementData: [
+                {
+                  id: extraDataBlameId || "unkown",
+                  type: "field",
+                  fieldType: "txt",
+                  value: extraData || undefined,
+                  icon: "",
+                  content: ""
+                }
+              ]
+            });
+          };
+        });
       }
       break;
     }
@@ -259,5 +291,5 @@ export {
   init
 };
 
-//# debugId=E142DE9D140DA8B264756E2164756E21
+//# debugId=AD87B809BED71D0564756E2164756E21
 //# sourceMappingURL=index.js.map

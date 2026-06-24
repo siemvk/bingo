@@ -1,9 +1,5 @@
 import { playerStateUpdate, type element, type playerId, type toClient, type toServer } from "../packet.js"
-/// <reference types="qrcode" />
-import type typesForQR from 'qrcode';
-declare const QRCode: typeof typesForQR;
-
-const code = document.getElementById("code");
+import QRCode from 'qrcode';
 
 let URL = "wss://ws.siemvk.nl"
 
@@ -17,26 +13,77 @@ const adminWs = new WebSocket(URL)
 let pin = "None"
 let Apin = "None"
 
+// --- BINGO STATE ---
 let fase: "voorbereiden" | "bezig" | "bingo" = "voorbereiden"
+let players: string[] = []
+let admin: string | undefined = undefined
+
+let drawnNumbers: number[] = [];
+let playerCards: Record<string, (number | "FREE")[][]> = {};
+let playerMarked: Record<string, number[]> = {};
+let bingoMode: "row" | "full" = "row";
+let bingoClaims: string[] = [];
+let falseBingos: string[] = [];
+// -------------------
+
+function generateBingoCard(): (number | "FREE")[][] {
+    const card: (number | "FREE")[][] = [[], [], [], [], []];
+    const colRanges = [
+        { min: 1, max: 15 },
+        { min: 16, max: 30 },
+        { min: 31, max: 45 },
+        { min: 46, max: 60 },
+        { min: 61, max: 75 }
+    ];
+
+    for (let c = 0; c < 5; c++) {
+        const nums = new Set<number>();
+        while (nums.size < 5) {
+            nums.add(Math.floor(Math.random() * 15) + colRanges[c]!.min);
+        }
+        const col = Array.from(nums);
+        for (let r = 0; r < 5; r++) {
+            card[r]![c] = col![r]!;
+        }
+    }
+    // Set middle to FREE
+    card[2]![2] = "FREE";
+    return card;
+}
 
 function setFase(newFase: "voorbereiden" | "bezig" | "bingo" = "voorbereiden") {
-    if (newFase == "bezig") {
-        document.getElementById("code-card")!.hidden = true
-        document.getElementById("main-card")!.hidden = false
+    if (newFase === "bezig" && fase === "voorbereiden") {
+        drawnNumbers = [];
+        falseBingos = [];
+        bingoClaims = [];
+        players.forEach(p => {
+            if (!playerCards[p]) playerCards[p] = generateBingoCard();
+            if (!playerMarked[p]) playerMarked[p] = [];
+        });
     }
+
+    if (newFase == "bezig") {
+        const codeCard = document.getElementById("code-card");
+        const mainCard = document.getElementById("main-card");
+        if (codeCard) codeCard.hidden = true;
+        if (mainCard) mainCard.hidden = false;
+    }
+
     fase = newFase;
-    players.forEach((player) => {
-        sendUI(player)
-    })
+    players.forEach(sendUI);
+    sendAdminState();
 }
 
 function wsSend(ws: WebSocket, data: toServer) {
-    ws.send(JSON.stringify(data))
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+    }
 }
 
+ws.addEventListener("open", () => {
+    const startKnop = document.getElementById("start-knop");
+    if (startKnop) startKnop.onclick = init;
 
-ws.addEventListener("open", (ev) => {
-    document.getElementById("start-knop")!.onclick = init
     wsSend(ws, {
         type: "newGame",
         name: "BINGO!!!",
@@ -44,7 +91,7 @@ ws.addEventListener("open", (ev) => {
     })
 })
 
-adminWs.addEventListener("open", (ev) => {
+adminWs.addEventListener("open", () => {
     wsSend(adminWs, {
         type: "newGame",
         name: "BINGO!!! (admin)",
@@ -56,30 +103,88 @@ function init() {
     setFase("bezig")
 }
 
-let players: string[] = []
-
 ws.addEventListener("message", (ev) => {
-    // aaaaaaa
     const msg: toClient = JSON.parse(ev.data)
 
     if (msg.type == "pin") {
         pin = msg.pin
         updC();
     }
+
     if (msg.type == "playerUpdate") {
         if (msg.update == playerStateUpdate.connect) {
             players.push(msg.player)
+            if (!playerCards[msg.player]) playerCards[msg.player] = generateBingoCard();
+            if (!playerMarked[msg.player]) playerMarked[msg.player] = [];
             console.log("Connect: ", msg.player)
             sendUI(msg.player)
-
         } else {
-            players = players.filter((v) => { if (v == msg.player) { return false; } return true })
+            players = players.filter(v => v !== msg.player)
             console.log("Disconnect: ", msg.player)
         }
         sendAdminState();
     }
 
+    // --- PLAYER ACTIONS ---
+    if (msg.type == "UI-msg") {
+        if (msg.elementInteractedWith.id == "bingo-knop") {
+            if (!bingoClaims.includes(msg.player)) {
+                bingoClaims.push(msg.player);
+            }
+            sendUI(msg.player);
+            sendAdminState();
+        }
+
+        if (msg.elementInteractedWith.id == "markBtn") {
+            const markInput = msg.elementData?.find(el => el.id == "markInput");
+            if (markInput!.type !== "field") {
+                return
+            }
+            if (markInput && markInput.value) {
+                const num = parseInt(markInput.value as string, 10);
+                const playerCard = playerCards[msg.player];
+                const marks = playerMarked[msg.player];
+
+                if (playerCard && marks && !isNaN(num)) {
+                    const isOnCard = playerCard.some(row => row.includes(num));
+                    const isDrawn = drawnNumbers.includes(num);
+
+                    if (!marks.includes(num) && isOnCard && isDrawn) {
+                        marks.push(num);
+                    }
+                }
+            }
+            sendUI(msg.player);
+        }
+    }
 })
+
+function validateBingo(player: string): boolean {
+    const card = playerCards[player];
+    if (!card) return false;
+
+    const marks = playerMarked[player] || [];
+
+    const isValid = (cell: number | "FREE") =>
+        cell === "FREE" || (marks.includes(cell as number) && drawnNumbers.includes(cell as number));
+
+    if (bingoMode === "full") {
+        return card.every(row => row.every(isValid));
+    } else {
+        for (let r = 0; r < 5; r++) if (card[r]!.every(isValid)) return true;
+        for (let c = 0; c < 5; c++) {
+            let colMarked = true;
+            for (let r = 0; r < 5; r++) { if (!isValid(card[r]![c]!)) colMarked = false; }
+            if (colMarked) return true;
+        }
+        let d1 = true, d2 = true;
+        for (let i = 0; i < 5; i++) {
+            if (!isValid(card![i]![i]!)) d1 = false;
+            if (!isValid(card![i]![4 - i]!)) d2 = false;
+        }
+        return d1 || d2;
+    }
+}
 
 function sendUI(player: playerId) {
     switch (fase) {
@@ -87,55 +192,65 @@ function sendUI(player: playerId) {
             wsSend(ws, {
                 type: "UI-set",
                 player,
-                elements: [
-                    {
-                        type: "txt",
-                        content: "Wacht tot de bingo begint!",
-                        id: "please-wait"
-                    }
-                ]
-            })
+                elements: [{ type: "txt", content: "Wacht tot de bingo begint!", id: "please-wait" }]
+            });
             break;
         case "bezig":
+            const card = playerCards[player] || generateBingoCard();
+            const marks = playerMarked[player] || [];
+
+            let tableHTML = `<table style="width:100%; text-align:center; border-collapse: collapse;" border="1">
+                <tr><th>B</th><th>I</th><th>N</th><th>G</th><th>O</th></tr>`;
+            for (const row of card) {
+                tableHTML += `<tr>`;
+                for (const cell of row) {
+                    const isMarked = cell === "FREE" || marks.includes(cell as number);
+                    const bgColor = isMarked ? '#a3e6a3' : 'transparent';
+                    tableHTML += `<td sendData="1" blame="markBtn" extraData="${cell}" extraDataBlame="markInput" style="padding: 10px; background-color: ${bgColor};">${cell}</td>`;
+                }
+                tableHTML += `</tr>`;
+            }
+            tableHTML += `</table>`;
+
+            const elementsList: element[] = [
+                { type: "html-render", content: tableHTML, id: "bingo-card" },
+                // { type: "field", fieldType: "txt", id: "markInput", content: "Nummer om af te strepen:", value: "", icon: "" },
+                // { type: "button", id: "markBtn", content: "Streep af", icon: "edit", interaction: "sendToHost" }
+            ];
+
+            if (falseBingos.includes(player)) {
+                elementsList.push({ type: "txt", content: "Valse Bingo!", id: "valse-bingo" });
+            }
+
+            if (bingoClaims.includes(player)) {
+                elementsList.push({ type: "txt", content: "Spannend! Spelleider controleert je kaart...", id: "wait-admin" });
+            } else {
+                elementsList.push({ type: "button", content: "BINGO!!!", icon: "celebration", id: "bingo-knop", interaction: "sendToHost" });
+            }
+
+            wsSend(ws, { type: "UI-set", player, elements: elementsList });
+            break;
+        case "bingo":
             wsSend(ws, {
                 type: "UI-set",
                 player,
-                elements: [
-                    {
-                        type: "txt",
-                        content: "todo: bingo hier maken",
-                        id: "placeholder"
-                    },
-                    {
-                        type: "button",
-                        content: "BINGO!!! ",
-                        icon: "celebration",
-                        id: "knop",
-                        interaction: "sendToHost"
-                    }
-                ]
-            })
-            break;
-        default:
+                elements: [{ type: "txt", content: "🎉 WE HEBBEN EEN WINNAAR! 🎉", id: "winner-text" }]
+            });
             break;
     }
 }
 
-let admin: string | undefined = undefined
 adminWs.addEventListener("message", (ev) => {
-    // aaaaaaa
     const msg: toClient = JSON.parse(ev.data)
 
     if (msg.type == "pin") {
         Apin = msg.pin
         updC();
     }
+
     if (msg.type == "playerUpdate" && msg.update == playerStateUpdate.connect) {
         if (admin != undefined) {
-            wsSend(adminWs, {
-                type: "kick",
-                player: msg.player
-            })
+            wsSend(adminWs, { type: "kick", player: msg.player })
         } else {
             admin = msg.player
             sendAdminState()
@@ -146,115 +261,143 @@ adminWs.addEventListener("message", (ev) => {
 
     if (msg.type == "UI-msg") {
         if (msg.elementInteractedWith.id == "setFase") {
-            const newFase = msg.elementData.filter((el) => el.id == "faseSelector")[0]
-            if (newFase?.type == "field") {
-                setFase(newFase.value as "voorbereiden" | "bezig" | "bingo")
+            const newFaseEl = msg.elementData?.find(el => el.id == "faseSelector");
+            const newModeEl = msg.elementData?.find(el => el.id == "modeSelector");
+
+            if (newModeEl?.type == "field" && newModeEl.value) {
+                bingoMode = newModeEl.value as "row" | "full";
             }
+            if (newFaseEl?.type == "field" && newFaseEl.value) {
+                setFase(newFaseEl.value as "voorbereiden" | "bezig" | "bingo");
+            }
+
         } else if (msg.elementInteractedWith.id == "toggelCodeView") {
-            document.getElementById("modal1")?.togglePopover();
+            const modal = document.getElementById("modal1");
+            if (modal && 'togglePopover' in modal) {
+                (modal as any).togglePopover();
+            }
+        } else if (msg.elementInteractedWith.id == "nextNum") {
+            drawNextNumber();
+        } else if (msg.elementInteractedWith.id.startsWith("checkBingo-")) {
+            const parts = msg.elementInteractedWith.id.split("-");
+            if (parts.length > 1) {
+                const targetPlayer = parts[1]!;
+                if (validateBingo(targetPlayer)) {
+                    setFase("bingo");
+                    bingoClaims = bingoClaims.filter(c => c !== targetPlayer);
+                } else {
+                    falseBingos.push(targetPlayer!);
+                    bingoClaims = bingoClaims.filter(c => c !== targetPlayer);
+                    players.forEach(sendUI);
+                    sendAdminState();
+                }
+            }
         } else if (msg.elementInteractedWith.id.startsWith("kick-")) {
-            wsSend(ws, {
-                type: "kick",
-                player: msg.elementInteractedWith.id.split("-")[1]!
-            })
+            const parts = msg.elementInteractedWith.id.split("-");
+            if (parts.length > 1) {
+                wsSend(ws, {
+                    type: "kick",
+                    player: parts[1]!
+                });
+            }
         }
     }
 })
 
+function drawNextNumber() {
+    if (drawnNumbers.length >= 75) return;
+    let n: number;
+    do {
+        n = Math.floor(Math.random() * 75) + 1;
+    } while (drawnNumbers.includes(n));
+
+    drawnNumbers.push(n);
+    falseBingos = [];
+
+    players.forEach(sendUI);
+    sendAdminState();
+
+    document.getElementById("bingoGetal")!.innerText = n.toString()
+}
+
 function sendAdminState() {
-    if (admin == undefined) {
-        return
-    }
-    let elList: element[] = [
+    if (admin == undefined) return;
+
+    let elList: element[] = [];
+
+    bingoClaims.forEach(p => {
+        elList.push({
+            type: "button",
+            id: "checkBingo-" + p,
+            content: `🚨 Controleer Bingo van ${p}!`,
+            icon: "gavel",
+            interaction: "sendToHost"
+        });
+    });
+
+    elList.push(
+        {
+            type: "field",
+            fieldType: "radio",
+            id: "modeSelector",
+            icon: "settings",
+            options: ["row", "full"],
+            content: "Bingo Modus (1 Rij of Volle Kaart)",
+            value: bingoMode
+        },
         {
             type: "field",
             fieldType: "radio",
             id: "faseSelector",
             icon: "dns",
-            options: [
-                "voorbereiden",
-                "bezig",
-                "bingo"
-            ],
+            options: ["voorbereiden", "bezig", "bingo"],
             content: "fase",
             value: fase
         },
-        {
-            type: "button",
-            id: "setFase",
-            content: "set fase",
-            icon: "save",
-            interaction: "sendToHost"
-        },
-        {
-            type: "button",
-            id: "toggelCodeView",
-            content: "Toggel code",
-            icon: "dns",
-            interaction: "sendToHost"
-        }
-    ]
+        { type: "button", id: "setFase", content: "Toepassen (Set Fase/Mode)", icon: "save", interaction: "sendToHost" },
+        { type: "button", id: "toggelCodeView", content: "Toggle code", icon: "dns", interaction: "sendToHost" }
+    );
+
     if (fase == "bezig") {
-        elList.push({
-            type: "button",
-            id: "nextNum",
-            content: "Volgend numer",
-            icon: "navigate_next",
-            interaction: "sendToHost"
-        })
+        elList.push({ type: "button", id: "nextNum", content: "Volgend nummer", icon: "navigate_next", interaction: "sendToHost" })
+        elList.push({ type: "txt", id: "drawn-list", content: `Getrokken (${drawnNumbers.length}/75)` })
     }
+
     players.forEach((p) => {
-        elList.push({
-            type: 'button',
-            id: "kick-" + p,
-            content: "Kick " + p,
-            icon: "block",
-            interaction: "sendToHost"
-        })
+        elList.push({ type: 'button', id: "kick-" + p, content: "Kick " + p, icon: "block", interaction: "sendToHost" })
     })
-    wsSend(adminWs, {
-        type: "UI-set",
-        player: admin,
-        elements: elList
-    })
+
+    wsSend(adminWs, { type: "UI-set", player: admin, elements: elList })
 }
 
-
 function updC() {
-    code!.innerText = "PIN: " + pin
-    document.getElementById("pin-pop")!.innerText = "De code is: " + pin
-    document.getElementById("adminPin")!.innerText = "De code is: " + Apin
+    const codeEl = document.getElementById("code");
+    const pinPop = document.getElementById("pin-pop");
+    const adminPin = document.getElementById("adminPin");
+
+    if (codeEl) codeEl.innerText = "PIN: " + pin;
+    if (pinPop) pinPop.innerText = "De code is: " + pin;
+    if (adminPin) adminPin.innerText = "De code is: " + Apin;
+
     sendAdminState();
     renderQR('my-canvas', pin);
     renderQR('my-canvas-popup', pin);
+    renderQR('my-canvas-popup-A', Apin);
 }
 
-
-
-function renderQR(el: string, pin: string) {
-    const canvas = document.getElementById(el) as HTMLCanvasElement;
-
-    // Safety check to ensure the element exists
+function renderQR(elId: string, pinCode: string) {
+    const canvas = document.getElementById(elId) as HTMLCanvasElement | null;
     if (!canvas) {
-        console.error('Canvas element not found!');
+        console.error(`Canvas element ${elId} not found!`);
         return;
     }
+    const textToEncode = `https://client.siemvk.nl/player/?p=${pinCode}`;
 
-    const textToEncode = `https://client.siemvk.nl/player/?p=${pin}`;
-
-    // 3. Generate the QR code with type-safe options
     QRCode.toCanvas(canvas, textToEncode, {
         width: 200,
         margin: 2,
-        color: {
-            dark: '#000000',  // Black dots
-            light: '#ffffff'  // White background
-        }
+        color: { dark: '#000000', light: '#ffffff' }
     }, (error: Error | null | undefined) => {
-        if (error) {
-            console.error('Failed to generate QR code:', error);
-        } else {
-            console.log('QR code generated successfully!');
-        }
+        if (error) console.error('Failed to generate QR code:', error);
     });
 }

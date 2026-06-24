@@ -87,14 +87,52 @@ function renderElement(el: element) {
             break;
         }
         case "html-render": {
-            const existingHtml = document.getElementById(el.id)
+            const existingHtml = document.getElementById(el.id);
+            let container = existingHtml;
+
             if (existingHtml) {
-                existingHtml.innerHTML = el.content
+                existingHtml.innerHTML = el.content;
             } else {
-                const newElement = document.createElement("div");
-                newElement.innerHTML = el.content
-                newElement.id = el.id
-                gameCard.appendChild(newElement)
+                container = document.createElement("div");
+                container.innerHTML = el.content;
+                container.id = el.id;
+                gameCard.appendChild(container);
+            }
+
+            // Intercept custom sendData syntax without altering the target elements
+            if (container) {
+                const customSenders = container.querySelectorAll('[sendData="1"]'.toLowerCase());
+                customSenders.forEach((sender) => {
+                    (sender as HTMLElement).onclick = (e) => {
+                        e.preventDefault(); // Prevents browser navigation if the element is a link
+
+                        const blameId = sender.getAttribute("blame");
+                        const extraDataBlameId = sender.getAttribute("extraDataBlame".toLowerCase());
+                        let extraData = sender.getAttribute("extraData".toLowerCase());
+
+                        // 3. SEND: Ship the ghost payload to the server
+                        wsSend(ws, {
+                            type: "UI-msg",
+                            elementInteractedWith: {
+                                id: blameId || "unknown",
+                                type: "button", // Disguise it as a standard button click to the server
+                                interaction: "sendToHost",
+                                icon: "",
+                                content: "",
+                            },
+                            elementData: [
+                                {
+                                    id: extraDataBlameId || "unkown",
+                                    type: "field",
+                                    fieldType: "txt",
+                                    value: extraData || undefined,
+                                    icon: "",
+                                    content: ""
+                                }
+                            ]
+                        });
+                    };
+                });
             }
             break;
         }
