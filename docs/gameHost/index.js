@@ -2341,9 +2341,13 @@ adminWs.addEventListener("message", (ev) => {
     }
   }
 });
+var nOud = "";
 function drawNextNumber() {
   if (drawnNumbers.length >= 75)
     return;
+  if (nOud !== "") {
+    document.getElementById("getalOud").innerHTML = nOud + "<br>" + document.getElementById("getalOud").innerHTML;
+  }
   let n;
   do {
     n = Math.floor(Math.random() * 75) + 1;
@@ -2353,6 +2357,7 @@ function drawNextNumber() {
   players.forEach(sendUI);
   sendAdminState();
   document.getElementById("bingoGetal").innerText = n.toString();
+  nOud = n;
 }
 function sendAdminState() {
   if (admin == undefined)
@@ -2425,5 +2430,5 @@ function renderQR(elId, pinCode) {
   });
 }
 
-//# debugId=DE9641D2FDED457764756E2164756E21
+//# debugId=E9D67FA444BD5B0764756E2164756E21
 //# sourceMappingURL=index.js.map

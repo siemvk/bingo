@@ -303,9 +303,12 @@ adminWs.addEventListener("message", (ev) => {
         }
     }
 })
-
+let nOud: number | "" = ""
 function drawNextNumber() {
     if (drawnNumbers.length >= 75) return;
+    if (nOud !== "") {
+        document.getElementById("getalOud")!.innerHTML = nOud + "<br>" + document.getElementById("getalOud")!.innerHTML
+    }
     let n: number;
     do {
         n = Math.floor(Math.random() * 75) + 1;
@@ -317,7 +320,8 @@ function drawNextNumber() {
     players.forEach(sendUI);
     sendAdminState();
 
-    document.getElementById("bingoGetal")!.innerText = n.toString()
+    document.getElementById("bingoGetal")!.innerText = n.toString();
+    nOud = n;
 }
 
 function sendAdminState() {
