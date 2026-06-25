@@ -2076,7 +2076,7 @@ var ws = new WebSocket(URL);
 var adminWs = new WebSocket(URL);
 var pin = "None";
 var Apin = "None";
-var fase = "voorbereiden";
+var fase = "preparing";
 var players = [];
 var admin = undefined;
 var drawnNumbers = [];
@@ -2107,8 +2107,8 @@ function generateBingoCard() {
   card[2][2] = "FREE";
   return card;
 }
-function setFase(newFase = "voorbereiden") {
-  if (newFase === "bezig" && fase === "voorbereiden") {
+function setFase(newFase = "preparing") {
+  if (newFase === "playingBingo" && fase === "preparing") {
     drawnNumbers = [];
     falseBingos = [];
     bingoClaims = [];
@@ -2119,7 +2119,7 @@ function setFase(newFase = "voorbereiden") {
         playerMarked[p] = [];
     });
   }
-  if (newFase == "bezig") {
+  if (newFase == "playingBingo") {
     const codeCard = document.getElementById("code-card");
     const mainCard = document.getElementById("main-card");
     if (codeCard)
@@ -2154,7 +2154,7 @@ adminWs.addEventListener("open", () => {
   });
 });
 function init() {
-  setFase("bezig");
+  setFase("playingBingo");
 }
 ws.addEventListener("message", (ev) => {
   const msg = JSON.parse(ev.data);
@@ -2239,14 +2239,14 @@ function validateBingo(player) {
 }
 function sendUI(player) {
   switch (fase) {
-    case "voorbereiden":
+    case "preparing":
       wsSend(ws, {
         type: "UI-set",
         player,
-        elements: [{ type: "txt", content: "Wacht tot de bingo begint!", id: "please-wait" }]
+        elements: [{ type: "txt", content: "Wait for the bingo to start!", id: "please-wait" }]
       });
       break;
-    case "bezig":
+    case "playingBingo":
       const card = playerCards[player] || generateBingoCard();
       const marks = playerMarked[player] || [];
       let tableHTML = `<table style="width:100%; text-align:center; border-collapse: collapse;" border="1">
@@ -2268,7 +2268,7 @@ function sendUI(player) {
         elementsList.push({ type: "txt", content: "Valse Bingo!", id: "valse-bingo" });
       }
       if (bingoClaims.includes(player)) {
-        elementsList.push({ type: "txt", content: "Spannend! Spelleider controleert je kaart...", id: "wait-admin" });
+        elementsList.push({ type: "txt", content: "The admin is checking your card...", id: "wait-admin" });
       } else {
         elementsList.push({ type: "button", content: "BINGO!!!", icon: "celebration", id: "bingo-knop", interaction: "sendToHost" });
       }
@@ -2278,7 +2278,7 @@ function sendUI(player) {
       wsSend(ws, {
         type: "UI-set",
         player,
-        elements: [{ type: "txt", content: "\uD83C\uDF89 WE HEBBEN EEN WINNAAR! \uD83C\uDF89", id: "winner-text" }]
+        elements: [{ type: "txt", content: "WE HAVE A WINNER!!!", id: "winner-text" }]
       });
       break;
   }
@@ -2367,7 +2367,7 @@ function sendAdminState() {
     elList.push({
       type: "button",
       id: "checkBingo-" + p,
-      content: `\uD83D\uDEA8 Controleer Bingo van ${p}!`,
+      content: `Check Bingo of ${p}!`,
       icon: "gavel",
       interaction: "sendToHost"
     });
@@ -2378,20 +2378,20 @@ function sendAdminState() {
     id: "modeSelector",
     icon: "settings",
     options: ["row", "full"],
-    content: "Bingo Modus (1 Rij of Volle Kaart)",
+    content: "Bingo mode (1 row or full card)",
     value: bingoMode
   }, {
     type: "field",
     fieldType: "radio",
     id: "faseSelector",
     icon: "dns",
-    options: ["voorbereiden", "bezig", "bingo"],
+    options: ["preparing", "playingBingo", "bingo"],
     content: "fase",
     value: fase
-  }, { type: "button", id: "setFase", content: "Toepassen (Set Fase/Mode)", icon: "save", interaction: "sendToHost" }, { type: "button", id: "toggelCodeView", content: "Toggle code", icon: "dns", interaction: "sendToHost" });
-  if (fase == "bezig") {
-    elList.push({ type: "button", id: "nextNum", content: "Volgend nummer", icon: "navigate_next", interaction: "sendToHost" });
-    elList.push({ type: "txt", id: "drawn-list", content: `Getrokken (${drawnNumbers.length}/75)` });
+  }, { type: "button", id: "setFase", content: "Save (Set Fase/Mode)", icon: "save", interaction: "sendToHost" }, { type: "button", id: "toggelCodeView", content: "Toggle code popup", icon: "dns", interaction: "sendToHost" });
+  if (fase == "playingBingo") {
+    elList.push({ type: "button", id: "nextNum", content: "Next number", icon: "navigate_next", interaction: "sendToHost" });
+    elList.push({ type: "txt", id: "drawn-list", content: `Drawn (${drawnNumbers.length}/75)` });
   }
   players.forEach((p) => {
     elList.push({ type: "button", id: "kick-" + p, content: "Kick " + p, icon: "block", interaction: "sendToHost" });
@@ -2405,9 +2405,9 @@ function updC() {
   if (codeEl)
     codeEl.innerText = "PIN: " + pin;
   if (pinPop)
-    pinPop.innerText = "De code is: " + pin;
+    pinPop.innerText = "The code is: " + pin;
   if (adminPin)
-    adminPin.innerText = "De code is: " + Apin;
+    adminPin.innerText = "The code is: " + Apin;
   sendAdminState();
   renderQR("my-canvas", pin);
   renderQR("my-canvas-popup", pin);
@@ -2430,5 +2430,5 @@ function renderQR(elId, pinCode) {
   });
 }
 
-//# debugId=E9D67FA444BD5B0764756E2164756E21
+//# debugId=60190318F9209A6D64756E2164756E21
 //# sourceMappingURL=index.js.map
