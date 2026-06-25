@@ -1,8 +1,22 @@
-N-naam = make new host
-P-pin = the pin to connect to the host
-C-pin = connect to the host
-M-message = the message to send to the host or client
+# Bingo (by siemvk)
 
+A version of bingo I made.
 
-X01 = weird format sent
-205 = host gave up
+features:
+- One client for players and admins
+- bingo
+- joining with qr code
+- websockets
+- cool ui
+
+## How to use
+1. go to `client.siemvk.nl` and click on host.
+2. open the burger menu
+3. click on the button on the right
+4. go to `client.siemvk.nl` on another device and click on connect
+5. enter the admin code displayed on the screen
+6. close the admin code popup
+7. let your players join
+8. start the bingo and play bingo
+
+in later versions I asked chatgpt to do a few things.
